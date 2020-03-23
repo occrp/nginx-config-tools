@@ -16,7 +16,7 @@ Modes are:
 
  - `flatten`:  
    flatten an nginx config file by inlining all includes recursively,
-   save to `<output_file>` (or to standard output if <output_file> not given)
+   save to `<output_file>` (or to standard output if `<output_file>` not given)
         
  - `clean-directory`:  
    generate a cleaned nginx config directory, containing only the files that
