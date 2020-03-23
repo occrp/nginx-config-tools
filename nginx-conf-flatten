@@ -1,0 +1,135 @@
+#!/bin/bash
+
+#
+# flatten an nginx config
+# 
+# replaces all occurences of the `include` directive
+# with the relevant included files
+#
+# assumptions:
+# - include file paths do not contain spaces
+#   (this seems compatible with how nginx handles includes)
+# - no files are included from above the directory where the nginx config file
+#   being processed resides in
+
+ORIG_CWD="$PWD"
+
+#
+# TODO: reality checks
+#
+
+NGINX_CONFIG="$( realpath -eL "$1" )"
+echo "+-- config file: '$NGINX_CONFIG'"
+
+NGINX_CONFIG_DIR="$( dirname "$NGINX_CONFIG" )"
+echo "    config directory: 'NGINX_CONFIG_DIR'"
+
+cd "$NGINX_CONFIG_DIR"
+
+TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
+echo "+-- TMP_WORKDIR: $TMP_WORKDIR"
+
+# the list of files whose includes we have not copied yet
+NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
+
+# 
+# extract the include paths from an nginx config file
+# 
+# $1 - the file to work with
+function nginx-extract-includes {
+    # assumption: include path does not contain spaces
+    egrep '^\s*include ' "$1" | sed -r -e "s/^\s*include\s*([^;]+).*$/\1/"
+}
+
+# 
+# handle all includes of a file to the temporary workdir
+# creating the directory structure in the process
+# and adding them to the NGINX_CONFIG_FILES variable
+# for further processing
+# 
+# $1 - the file to work with
+function nginx-handle-includes {
+    # get the included files
+    # this will loop through actual globbed filenames
+    # 
+    # assumption: no files are included from directories above the directory
+    # the main config file resides in
+    for i in $( nginx-extract-includes "$1" ); do
+        echo -n "        +-- found include: $i"
+        # if the temporary copy of the file does not exist
+        if [ ! -e "$TMP_WORKDIR/$i" ]; then
+            echo " - copying!"
+            # create the directory structure
+            mkdir -p "$TMP_WORKDIR/$( dirname "$i" )"
+            # copy the file
+            cp "$NGINX_CONFIG_DIR/$i" "$TMP_WORKDIR/$i"
+            # add to the list of files to proces
+            NGINX_CONFIG_ELEMENTS+=("$i")
+        else
+            echo " - already copied."
+        fi
+    done
+}
+
+
+function nginx-clean-directory {
+    # let's get the file in a temporary location
+    # (we don't want to screw up the original!)
+    cp "$NGINX_CONFIG" "$TMP_WORKDIR"/
+
+    # go one by one over the NGINX_CONFIG_ELEMENTS array
+    # but from the end
+    while [[ ${#NGINX_CONFIG_ELEMENTS[@]} > 0 ]]; do
+        CUR_INDEX=$(( ${#NGINX_CONFIG_ELEMENTS[@]} - 1 ))
+        CUR_ELEMENT=${NGINX_CONFIG_ELEMENTS[$CUR_INDEX]}
+        echo "    +-- working with index: $CUR_INDEX"
+        echo "        $CUR_ELEMENT"
+        unset "NGINX_CONFIG_ELEMENTS[$CUR_INDEX]"
+        nginx-handle-includes "$CUR_ELEMENT";
+    done
+    # TODO: finish
+}
+
+# let's get the file in a temporary location
+# (we don't want to screw up the original!)
+cp "$NGINX_CONFIG" "$TMP_WORKDIR"/
+NGINX_CONFIG_COPY="$TMP_WORKDIR/$( basename "$NGINX_CONFIG")"
+
+OLDIFS="$IFS"
+IFS=$'\n'
+while CURRENT_INCLUDES="$( egrep -n '^\s*include\s*.+;.*$' "$NGINX_CONFIG_COPY" )"; do
+    PREVIOUS_CI_LINE=0;
+    for ci in $CURRENT_INCLUDES; do
+        # get the actual file glob
+        CI_FILE_GLOB="$( echo "$ci" | sed -r -e "s/^[0-9]+\:\s*include\s*([^;]+).*$/\1/" )"
+        CI_LINE="$( echo "$ci" | cut -d ':' -f 1 )"
+        DATE_EXT="$( date +%s%N )"
+        #echo "    +-- previous line : $PREVIOUS_CI_LINE"
+        #echo "        ci line       : $CI_LINE"
+        tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" | head -n $(( $CI_LINE - 1 - $PREVIOUS_CI_LINE )) > "$NGINX_CONFIG_COPY.$DATE_EXT"
+        echo -e "\n############################################################\n### $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+        cat $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+        echo -e "\n############################################################\n### end $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+        PREVIOUS_CI_LINE="$CI_LINE"
+    done
+    #echo "pre-cat waiting..."
+    #read
+    cat $NGINX_CONFIG_COPY.* > "$NGINX_CONFIG_COPY"
+    rm $NGINX_CONFIG_COPY.*
+    #echo "post-rm waiting..."
+    #read
+done
+IFS="$OLDIFS"
+
+# get back to the original directory we've been running from
+cd "$ORIG_CWD"
+
+# check how we need to output the thing
+if [ "$2" != "" ]; then
+    echo "+-- moving the temporary output file to the output destination"
+    echo "    src: $NGINX_CONFIG_COPY"
+    echo "    dst: $2"
+    mv "$NGINX_CONFIG_COPY" "$( basename $2 )"
+    echo "+-- cleaning up the temporary output directory"
+    rm -rf "$TMP_WORKDIR"
+fi
