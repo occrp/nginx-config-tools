@@ -23,7 +23,7 @@ Modes are:
    are included from the input file, or files included from those, and so on;
    output to `<output_directory>`
 
-Imporant caveats:
+Important caveats:
 
  - `<input_file>` *must* exist (if it doesn't the script will exit with an error)
  - `<output_file>`/`<output_directory>` *must not* exist (if it does, the script will exit with an error)
