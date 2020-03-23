@@ -16,25 +16,22 @@ function debug {
     echo "$@" >&2
 }
 
-ORIG_CWD="$PWD"
 
 #
-# TODO: reality checks
-#
+# get the path relative to a different base path
+# if the former is relative
+# 
+# $1 - path
+# $2 - base path
+function get-path-relative-to {
+    # if the path is absolute, that's all we need
+    if [[ "$1" = /* ]]; then
+        echo "$1"
+    else
+        echo "$2/$1"
+    fi
+}
 
-NGINX_CONFIG="$( realpath -eL "$1" )"
-debug "+-- config file: '$NGINX_CONFIG'"
-
-NGINX_CONFIG_DIR="$( dirname "$NGINX_CONFIG" )"
-debug "    config directory: 'NGINX_CONFIG_DIR'"
-
-cd "$NGINX_CONFIG_DIR"
-
-TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
-debug "+-- TMP_WORKDIR: $TMP_WORKDIR"
-
-# the list of files whose includes we have not copied yet
-NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
 
 # 
 # extract the include paths from an nginx config file
@@ -76,6 +73,13 @@ function nginx-handle-includes {
 }
 
 
+#
+# generate a cleaned nginx config directory,
+# containing only the files that are included from the config file
+# passed as the argument, or files included from those, etc
+# 
+# $NGINX_CONFIG - nginx config file to work off of
+# $OUTPUT_DEST  - target directory (must *not* exist)
 function nginx-clean-directory {
     # let's get the file in a temporary location
     # (we don't want to screw up the original!)
@@ -91,49 +95,137 @@ function nginx-clean-directory {
         unset "NGINX_CONFIG_ELEMENTS[$CUR_INDEX]"
         nginx-handle-includes "$CUR_ELEMENT";
     done
-    # TODO: finish
+    
+    # move the temporary work dir to the output location
+    debug "+-- moving the temporary output directory to the final output location"
+    debug "    src: $TMP_WORKDIR"
+    debug "    dst: $OUTPUT_DEST"
+    mv "$TMP_WORKDIR" "$OUTPUT_DEST"
 }
 
-# let's get the file in a temporary location
-# (we don't want to screw up the original!)
-cp "$NGINX_CONFIG" "$TMP_WORKDIR"/
-NGINX_CONFIG_COPY="$TMP_WORKDIR/$( basename "$NGINX_CONFIG")"
 
-OLDIFS="$IFS"
-IFS=$'\n'
-while CURRENT_INCLUDES="$( egrep -n '^\s*include\s*.+;.*$' "$NGINX_CONFIG_COPY" )"; do
-    PREVIOUS_CI_LINE=0;
-    for ci in $CURRENT_INCLUDES; do
-        # get the actual file glob
-        CI_FILE_GLOB="$( echo "$ci" | sed -r -e "s/^[0-9]+\:\s*include\s*([^;]+).*$/\1/" )"
-        CI_LINE="$( echo "$ci" | cut -d ':' -f 1 )"
-        DATE_EXT="$( date +%s%N )"
-        #debug "    +-- previous line : $PREVIOUS_CI_LINE"
-        #debug "        ci line       : $CI_LINE"
-        tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" | head -n $(( $CI_LINE - 1 - $PREVIOUS_CI_LINE )) > "$NGINX_CONFIG_COPY.$DATE_EXT"
-        echo -e "\n############################################################\n### $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
-        cat $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
-        echo -e "\n############################################################\n### end $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
-        PREVIOUS_CI_LINE="$CI_LINE"
+#
+# flatten an nginx config file,
+# including all includes inline, recursively
+# 
+# $NGINX_CONFIG - nginx config file to work off of
+# $OUTPUT_DEST  - where to output the assembled, flattened file (must not exist)
+function nginx-flatten {
+    
+    # let's get the file in a temporary location
+    # (we don't want to screw up the original!)
+    cp "$NGINX_CONFIG" "$TMP_WORKDIR"/
+    NGINX_CONFIG_COPY="$TMP_WORKDIR/$( basename "$NGINX_CONFIG")"
+
+    OLDIFS="$IFS"
+    IFS=$'\n'
+    while CURRENT_INCLUDES="$( egrep -n '^\s*include\s*.+;.*$' "$NGINX_CONFIG_COPY" )"; do
+        PREVIOUS_CI_LINE=0;
+        for ci in $CURRENT_INCLUDES; do
+            # get the actual file glob
+            CI_FILE_GLOB="$( echo "$ci" | sed -r -e "s/^[0-9]+\:\s*include\s*([^;]+).*$/\1/" )"
+            CI_LINE="$( echo "$ci" | cut -d ':' -f 1 )"
+            DATE_EXT="$( date +%s%N )"
+            #debug "    +-- previous line : $PREVIOUS_CI_LINE"
+            #debug "        ci line       : $CI_LINE"
+            tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" | head -n $(( $CI_LINE - 1 - $PREVIOUS_CI_LINE )) > "$NGINX_CONFIG_COPY.$DATE_EXT"
+            echo -e "\n############################################################\n### $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+            cat $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+            echo -e "\n############################################################\n### end $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+            PREVIOUS_CI_LINE="$CI_LINE"
+        done
+        #debug "pre-cat waiting..."
+        #read
+        cat $NGINX_CONFIG_COPY.* > "$NGINX_CONFIG_COPY"
+        rm $NGINX_CONFIG_COPY.*
+        #debug "post-rm waiting..."
+        #read
     done
-    #debug "pre-cat waiting..."
-    #read
-    cat $NGINX_CONFIG_COPY.* > "$NGINX_CONFIG_COPY"
-    rm $NGINX_CONFIG_COPY.*
-    #debug "post-rm waiting..."
-    #read
-done
-IFS="$OLDIFS"
+    IFS="$OLDIFS"
+
+    debug "+-- moving the temporary output file to the output destination"
+    debug "    src: $NGINX_CONFIG_COPY"
+    debug "    dst: $OUTPUT_DEST"
+    mv "$NGINX_CONFIG_COPY" "$OUTPUT_DEST"
+    debug "+-- cleaning up the temporary output directory"
+    rm -rf "$TMP_WORKDIR"
+}
+
+function print-usage {
+    cat - <<HEREDOC
+    
+usage:
+    $0 <mode> <source_file> <output_file|output_directory>
+    
+modes:
+    
+    flatten:
+        flatten an nginx config file by inlining all includes recursively,
+        save to <output_file>
+        
+    clean-directory:
+        generate a cleaned nginx config directory, containing only the files
+        that are included from the source file, or files included from those,
+        and so on; output to <output_directory>
+    
+HEREDOC
+}
+
+
+ORIG_CWD="$PWD"
+
+# we really need 3 arguments:
+# $1 - mode of operation
+# $2 - source file
+# $3 - destination file/directory
+
+if [ "$1" == "" ] || [ "$2" == "" ] || [ "$3" == "" ]; then
+    print-usage
+    exit 1
+fi
+
+# source file exists?
+if [ ! -f "$2" ] || [ ! -r "$2" ]; then
+    echo
+    echo "ERROR: source config file $2 doesn't exist or read access not granted"
+    echo
+    exit 2
+fi
+
+# destination file/directory must not exist
+OUTPUT_DEST="$( get-path-relative-to "$3" "$ORIG_CWD" )"
+if [ -e "$OUTPUT_DEST" ]; then
+    echo
+    echo "WARNING: output file/directory exists; quitting!"
+    echo
+    exit 3
+fi
+
+
+NGINX_CONFIG="$( realpath -eL "$2" )"
+debug "+-- config file: '$NGINX_CONFIG'"
+
+NGINX_CONFIG_DIR="$( dirname "$NGINX_CONFIG" )"
+debug "    config directory: 'NGINX_CONFIG_DIR'"
+
+cd "$NGINX_CONFIG_DIR"
+
+TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
+debug "+-- TMP_WORKDIR: $TMP_WORKDIR"
+
+# the list of files whose includes we have not copied yet
+NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
+
+
+# what are we doing, eh?
+if [ "$1" == "flatten" ]; then
+    nginx-flatten "$NGINX_CONFIG" "$3"
+elif [ "$1" == "clean-directory" ]; then
+    nginx-clean-directory "$NGINX_CONFIG" "$3"
+else
+    print-usage
+    exit 1
+fi
 
 # get back to the original directory we've been running from
 cd "$ORIG_CWD"
-
-# check how we need to output the thing
-if [ "$2" != "" ]; then
-    debug "+-- moving the temporary output file to the output destination"
-    debug "    src: $NGINX_CONFIG_COPY"
-    debug "    dst: $2"
-    mv "$NGINX_CONFIG_COPY" "$( basename $2 )"
-    debug "+-- cleaning up the temporary output directory"
-    rm -rf "$TMP_WORKDIR"
-fi
