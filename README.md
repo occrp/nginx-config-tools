@@ -9,15 +9,15 @@ nginx-conf-flatten <mode> <input_file> <output_file|output_directory>
 ```
 
 Modes are:
-    
-    `flatten`:
-        flatten an nginx config file by inlining all includes recursively,
-        save to <output_file>
+
+ - `flatten`:  
+   flatten an nginx config file by inlining all includes recursively,
+   save to <output_file>
         
-    `clean-directory`:
-        generate a cleaned nginx config directory, containing only the files
-        that are included from the input file, or files included from those,
-        and so on; output to <output_directory>
+ - `clean-directory`:  
+   generate a cleaned nginx config directory, containing only the files that
+   are included from the input file, or files included from those, and so on;
+   output to <output_directory>
 
 Imporant caveats:
 
