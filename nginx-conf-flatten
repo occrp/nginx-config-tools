@@ -168,7 +168,73 @@ function nginx-flatten {
 #
 # print the include tree, or dump it to a file
 function nginx-tree {
-    echo "NOT IMPLEMENTED YET"
+    
+    # includes map
+    declare -A NGINX_INCLUDES_MAP
+    
+    # go one by one over the NGINX_CONFIG_ELEMENTS array
+    # using it as a stack
+    while [[ ${#NGINX_CONFIG_ELEMENTS[@]} > 0 ]]; do
+        CUR_INDEX=$(( ${#NGINX_CONFIG_ELEMENTS[@]} - 1 ))
+        CUR_ELEMENT="${NGINX_CONFIG_ELEMENTS[$CUR_INDEX]}"
+        debug "    +-- working with index: $CUR_INDEX"
+        debug "        $CUR_ELEMENT"
+        unset "NGINX_CONFIG_ELEMENTS[$CUR_INDEX]"
+        
+        if [ "${NGINX_INCLUDES_MAP[$CUR_ELEMENT]}" == "" ]; then
+            # ...create the include map
+            CURRENT_INCLUDES=""
+            
+            # this will loop through actual globbed filenames
+            for i in $( nginx-extract-includes "$CUR_ELEMENT" ); do
+                NGINX_CONFIG_ELEMENTS+=("$i")
+                CURRENT_INCLUDES="$CURRENT_INCLUDES $i"
+            done
+            NGINX_INCLUDES_MAP[$CUR_ELEMENT]="$CURRENT_INCLUDES"
+        fi
+        # otherwise we've processed this file and all included files already
+    done
+    
+    # let's do this again, now having the map data
+    CUR_INDENT=""
+    INDENT_ALREADY_DECREASED=0
+    NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
+    while [[ ${#NGINX_CONFIG_ELEMENTS[@]} > 0 ]]; do
+        CUR_INDEX=$(( ${#NGINX_CONFIG_ELEMENTS[@]} - 1 ))
+        CUR_ELEMENT="${NGINX_CONFIG_ELEMENTS[$CUR_INDEX]}"
+        debug "    +-- working with index: $CUR_INDEX"
+        debug "        $CUR_ELEMENT"
+        unset "NGINX_CONFIG_ELEMENTS[$CUR_INDEX]"
+        
+        if [ "$CUR_ELEMENT" == "   DECREASE INDENT   " ]; then
+            CUR_INDENT="${CUR_INDENT:3}"
+            
+            if [ "$INDENT_ALREADY_DECREASED" == 0 ]; then
+                if [ "$OUTPUT_DEST" == '-' ]; then
+                    echo "$CUR_INDENT"
+                else
+                    echo "$CUR_INDENT" >> "$OUTPUT_DEST"
+                fi
+            fi
+            INDENT_ALREADY_DECREASED=1
+        else
+            INDENT_ALREADY_DECREASED=0
+            if [ "$OUTPUT_DEST" == '-' ]; then
+                echo "$CUR_INDENT-  $CUR_ELEMENT"
+            else
+                echo "$CUR_INDENT-  $CUR_ELEMENT" >> "$OUTPUT_DEST"
+            fi
+            
+            if [ "${NGINX_INCLUDES_MAP[$CUR_ELEMENT]}" != "" ]; then
+                NGINX_CONFIG_ELEMENTS+=("   DECREASE INDENT   ")
+                # we need the order of includes reversed
+                for i in `echo "${NGINX_INCLUDES_MAP[$CUR_ELEMENT]}" | tr ' ' $'\n' | tac`; do
+                    NGINX_CONFIG_ELEMENTS+=("$i")
+                done
+                CUR_INDENT="   $CUR_INDENT"
+            fi
+        fi
+    done
 }
 
 
@@ -184,11 +250,12 @@ modes:
     
     tree:
         generate a tree of includes and save it to <output_file>
-        (or to standard output if <output_file> not given)
+        (or print to standard output if <output_file> not given)
     
     flatten:
         flatten an nginx config file by inlining all includes recursively,
-        save to <output_file> (or to standard output if <output_file> not given)
+        save to <output_file> (or print to standard output if <output_file>
+        not given)
         
     clean-directory:
         generate a cleaned nginx config directory, containing only the files
@@ -275,6 +342,9 @@ else
     print-usage
     exit 1
 fi
+
+# cleanup
+rm -rf "$TMP_WORKDIR"
 
 # get back to the original directory we've been running from
 cd "$ORIG_CWD"
