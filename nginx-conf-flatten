@@ -155,11 +155,25 @@ function nginx-flatten {
     debug "+-- moving the temporary output file to the output destination"
     debug "    src: $NGINX_CONFIG_COPY"
     debug "    dst: $OUTPUT_DEST"
-    mv "$NGINX_CONFIG_COPY" "$OUTPUT_DEST"
+    if [ "$OUTPUT_DEST" == '-' ]; then
+        cat "$NGINX_CONFIG_COPY"
+    else
+        mv "$NGINX_CONFIG_COPY" "$OUTPUT_DEST"
+    fi
     debug "+-- cleaning up the temporary output directory"
     rm -rf "$TMP_WORKDIR"
 }
 
+
+#
+# print the include tree, or dump it to a file
+function nginx-tree {
+    echo "NOT IMPLEMENTED YET"
+}
+
+
+#
+# print the usage
 function print-usage {
     cat - <<HEREDOC
     
@@ -168,9 +182,13 @@ usage:
     
 modes:
     
+    tree:
+        generate a tree of includes and save it to <output_file>
+        (or to standard output if <output_file> not given)
+    
     flatten:
         flatten an nginx config file by inlining all includes recursively,
-        save to <output_file>
+        save to <output_file> (or to standard output if <output_file> not given)
         
     clean-directory:
         generate a cleaned nginx config directory, containing only the files
@@ -188,7 +206,7 @@ ORIG_CWD="$PWD"
 # $2 - source file
 # $3 - destination file/directory
 
-if [ "$1" == "" ] || [ "$2" == "" ] || [ "$3" == "" ]; then
+if [ "$1" == "" ] || [ "$2" == "" ]; then
     print-usage
     exit 1
 fi
@@ -201,15 +219,35 @@ if [ ! -f "$2" ] || [ ! -r "$2" ]; then
     exit 2
 fi
 
-# destination file/directory must not exist
-OUTPUT_DEST="$( get-path-relative-to "$3" "$ORIG_CWD" )"
-if [ -e "$OUTPUT_DEST" ]; then
-    echo
-    echo "WARNING: output file/directory exists; quitting!"
-    echo
-    exit 3
+if [ "$1" == "flatten" ] || [ "$1" == "tree" ]; then
+    if [ "$3" == "" ]; then
+        OUTPUT_DEST="-"
+        debug "+-- output to stdout."
+    else
+        # destination file/directory must not exist
+        OUTPUT_DEST="$( get-path-relative-to "$3" "$ORIG_CWD" )"
+        if [ -e "$OUTPUT_DEST" ]; then
+            echo
+            echo "WARNING: output file/directory exists; quitting!"
+            echo
+            exit 3
+        fi
+    fi
+# for clean-director we always have to have $3
+else
+    if [ "$3" == "" ]; then
+        print-usage
+        exit 1
+    fi
+    # destination file/directory must not exist
+    OUTPUT_DEST="$( get-path-relative-to "$3" "$ORIG_CWD" )"
+    if [ -e "$OUTPUT_DEST" ]; then
+        echo
+        echo "WARNING: output file/directory exists; quitting!"
+        echo
+        exit 3
+    fi
 fi
-
 
 NGINX_CONFIG="$( realpath -eL "$2" )"
 debug "+-- config file: '$NGINX_CONFIG'"
@@ -228,9 +266,11 @@ NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
 
 # what are we doing, eh?
 if [ "$1" == "flatten" ]; then
-    nginx-flatten "$NGINX_CONFIG" "$3"
+    nginx-flatten
 elif [ "$1" == "clean-directory" ]; then
-    nginx-clean-directory "$NGINX_CONFIG" "$3"
+    nginx-clean-directory
+elif [ "$1" == "tree" ]; then
+    nginx-tree
 else
     print-usage
     exit 1

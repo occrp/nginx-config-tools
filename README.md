@@ -12,7 +12,7 @@ Modes are:
 
  - `flatten`:  
    flatten an nginx config file by inlining all includes recursively,
-   save to `<output_file>`
+   save to `<output_file>` (or to standard output if <output_file> not given)
         
  - `clean-directory`:  
    generate a cleaned nginx config directory, containing only the files that
@@ -24,7 +24,9 @@ Imporant caveats:
  - `<input_file>` *must* exist (if it doesn't the script will exit with an error)
  - `<output_file>`/`<output_directory>` *must not* exist (if it does, the script will exit with an error)
 
-Debug output (a lot of it!) can be enabled by setting the `NGINX_CONF_FLATTEN_DEBUG` environment variable to any non-empty string before running `nginx-conf-flatten`. For example:
+Debug output (a lot of it!) can be enabled by setting the `NGINX_CONF_FLATTEN_DEBUG` environment variable to any non-empty string before running `nginx-conf-flatten`. If enabled, it is printed to `stderr`.
+
+For example:
 
 ```
 NGINX_CONF_FLATTEN_DEBUG='yes-please' nginx-conf-flatten flatten /etc/nginx.conf ./flat.conf
