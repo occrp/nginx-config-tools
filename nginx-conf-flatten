@@ -12,6 +12,10 @@
 # - no files are included from above the directory where the nginx config file
 #   being processed resides in
 
+function debug {
+    echo "$@" >&2
+}
+
 ORIG_CWD="$PWD"
 
 #
@@ -19,15 +23,15 @@ ORIG_CWD="$PWD"
 #
 
 NGINX_CONFIG="$( realpath -eL "$1" )"
-echo "+-- config file: '$NGINX_CONFIG'"
+debug "+-- config file: '$NGINX_CONFIG'"
 
 NGINX_CONFIG_DIR="$( dirname "$NGINX_CONFIG" )"
-echo "    config directory: 'NGINX_CONFIG_DIR'"
+debug "    config directory: 'NGINX_CONFIG_DIR'"
 
 cd "$NGINX_CONFIG_DIR"
 
 TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
-echo "+-- TMP_WORKDIR: $TMP_WORKDIR"
+debug "+-- TMP_WORKDIR: $TMP_WORKDIR"
 
 # the list of files whose includes we have not copied yet
 NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
@@ -55,10 +59,10 @@ function nginx-handle-includes {
     # assumption: no files are included from directories above the directory
     # the main config file resides in
     for i in $( nginx-extract-includes "$1" ); do
-        echo -n "        +-- found include: $i"
+        debug -n "        +-- found include: $i"
         # if the temporary copy of the file does not exist
         if [ ! -e "$TMP_WORKDIR/$i" ]; then
-            echo " - copying!"
+            debug " - copying!"
             # create the directory structure
             mkdir -p "$TMP_WORKDIR/$( dirname "$i" )"
             # copy the file
@@ -66,7 +70,7 @@ function nginx-handle-includes {
             # add to the list of files to proces
             NGINX_CONFIG_ELEMENTS+=("$i")
         else
-            echo " - already copied."
+            debug " - already copied."
         fi
     done
 }
@@ -82,8 +86,8 @@ function nginx-clean-directory {
     while [[ ${#NGINX_CONFIG_ELEMENTS[@]} > 0 ]]; do
         CUR_INDEX=$(( ${#NGINX_CONFIG_ELEMENTS[@]} - 1 ))
         CUR_ELEMENT=${NGINX_CONFIG_ELEMENTS[$CUR_INDEX]}
-        echo "    +-- working with index: $CUR_INDEX"
-        echo "        $CUR_ELEMENT"
+        debug "    +-- working with index: $CUR_INDEX"
+        debug "        $CUR_ELEMENT"
         unset "NGINX_CONFIG_ELEMENTS[$CUR_INDEX]"
         nginx-handle-includes "$CUR_ELEMENT";
     done
@@ -104,19 +108,19 @@ while CURRENT_INCLUDES="$( egrep -n '^\s*include\s*.+;.*$' "$NGINX_CONFIG_COPY" 
         CI_FILE_GLOB="$( echo "$ci" | sed -r -e "s/^[0-9]+\:\s*include\s*([^;]+).*$/\1/" )"
         CI_LINE="$( echo "$ci" | cut -d ':' -f 1 )"
         DATE_EXT="$( date +%s%N )"
-        #echo "    +-- previous line : $PREVIOUS_CI_LINE"
-        #echo "        ci line       : $CI_LINE"
+        #debug "    +-- previous line : $PREVIOUS_CI_LINE"
+        #debug "        ci line       : $CI_LINE"
         tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" | head -n $(( $CI_LINE - 1 - $PREVIOUS_CI_LINE )) > "$NGINX_CONFIG_COPY.$DATE_EXT"
         echo -e "\n############################################################\n### $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
         cat $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
         echo -e "\n############################################################\n### end $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
         PREVIOUS_CI_LINE="$CI_LINE"
     done
-    #echo "pre-cat waiting..."
+    #debug "pre-cat waiting..."
     #read
     cat $NGINX_CONFIG_COPY.* > "$NGINX_CONFIG_COPY"
     rm $NGINX_CONFIG_COPY.*
-    #echo "post-rm waiting..."
+    #debug "post-rm waiting..."
     #read
 done
 IFS="$OLDIFS"
@@ -126,10 +130,10 @@ cd "$ORIG_CWD"
 
 # check how we need to output the thing
 if [ "$2" != "" ]; then
-    echo "+-- moving the temporary output file to the output destination"
-    echo "    src: $NGINX_CONFIG_COPY"
-    echo "    dst: $2"
+    debug "+-- moving the temporary output file to the output destination"
+    debug "    src: $NGINX_CONFIG_COPY"
+    debug "    dst: $2"
     mv "$NGINX_CONFIG_COPY" "$( basename $2 )"
-    echo "+-- cleaning up the temporary output directory"
+    debug "+-- cleaning up the temporary output directory"
     rm -rf "$TMP_WORKDIR"
 fi
