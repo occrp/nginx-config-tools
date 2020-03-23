@@ -12,8 +12,14 @@
 # - no files are included from above the directory where the nginx config file
 #   being processed resides in
 
+# set debug verbosity to none
+[ -z "${NGINX_CONFIG_FLATTEN_DEBUG+x}" ] && NGINX_CONFIG_FLATTEN_DEBUG=""
+
+
 function debug {
-    echo "$@" >&2
+    if [ "$NGINX_CONFIG_FLATTEN_DEBUG" != "" ]; then
+        echo "$@" >&2
+    fi
 }
 
 
@@ -130,18 +136,19 @@ function nginx-flatten {
             debug "    +-- previous line : $PREVIOUS_CI_LINE"
             debug "        ci line       : $CI_LINE"
             debug "        indent        : '$CI_INDENT'"
+            debug "        glob          : '$CI_FILE_GLOB'"
             tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" | head -n $(( $CI_LINE - 1 - $PREVIOUS_CI_LINE )) > "$NGINX_CONFIG_COPY.$DATE_EXT"
             echo -e "\n$CI_INDENT############################################################\n$CI_INDENT### $CI_FILE_GLOB \n$CI_INDENT############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
             sed -r -e "s/^/$CI_INDENT/" $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
             echo -e "\n$CI_INDENT############################################################\n$CI_INDENT### end $CI_FILE_GLOB \n$CI_INDENT############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
             PREVIOUS_CI_LINE="$CI_LINE"
         done
-        #debug "pre-cat waiting..."
-        #read
+        debug "    +-- previous line : $PREVIOUS_CI_LINE"
+        debug "        finishing this run off."
+        DATE_EXT="$( date +%s%N )"
+        tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" > "$NGINX_CONFIG_COPY.$DATE_EXT"
         cat $NGINX_CONFIG_COPY.* > "$NGINX_CONFIG_COPY"
         rm $NGINX_CONFIG_COPY.*
-        #debug "post-rm waiting..."
-        #read
     done
     IFS="$OLDIFS"
 
