@@ -13,11 +13,11 @@
 #   being processed resides in
 
 # set debug verbosity to none
-[ -z "${NGINX_CONFIG_FLATTEN_DEBUG+x}" ] && NGINX_CONFIG_FLATTEN_DEBUG=""
+[ -z "${NGINX_CONF_FLATTEN_DEBUG+x}" ] && NGINX_CONF_FLATTEN_DEBUG=""
 
 
 function debug {
-    if [ "$NGINX_CONFIG_FLATTEN_DEBUG" != "" ]; then
+    if [ "$NGINX_CONF_FLATTEN_DEBUG" != "" ]; then
         echo "$@" >&2
     fi
 }
