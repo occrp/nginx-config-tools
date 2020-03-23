@@ -42,6 +42,8 @@ The script creates a temporary directory (`/tmp/nginx-conf-flatten.????`) and wo
 
 Once output is ready (either in the form of a single flattened `nginx` config file if mode was `flatten`, or a directory structure if it was `clean-directory`), it is moved to the correct location and the temporary directory is removed.
 
+No temporary files are created when in `tree` mode.
+
 The `flatten` mode makes an honest attempt at keeping indentation sane. This means looking at an `include` line, and indenting the text included from the relevant files by whatever indent was there in the `include` line. This seems to work reasonably well, but if you want the config to be linted and nicely formatted, use a linter and [a formatter](https://github.com/1connect/nginx-config-formatter).
 
 
