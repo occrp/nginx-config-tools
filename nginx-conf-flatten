@@ -125,13 +125,15 @@ function nginx-flatten {
             # get the actual file glob
             CI_FILE_GLOB="$( echo "$ci" | sed -r -e "s/^[0-9]+\:\s*include\s*([^;]+).*$/\1/" )"
             CI_LINE="$( echo "$ci" | cut -d ':' -f 1 )"
+            CI_INDENT="$( echo "$ci" | cut -d ':' -f 2 | sed -r -e 's/^(\s*).*$/\1/' )"
             DATE_EXT="$( date +%s%N )"
-            #debug "    +-- previous line : $PREVIOUS_CI_LINE"
-            #debug "        ci line       : $CI_LINE"
+            debug "    +-- previous line : $PREVIOUS_CI_LINE"
+            debug "        ci line       : $CI_LINE"
+            debug "        indent        : '$CI_INDENT'"
             tail -n "+$(( $PREVIOUS_CI_LINE + 1 ))" "$NGINX_CONFIG_COPY" | head -n $(( $CI_LINE - 1 - $PREVIOUS_CI_LINE )) > "$NGINX_CONFIG_COPY.$DATE_EXT"
-            echo -e "\n############################################################\n### $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
-            cat $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
-            echo -e "\n############################################################\n### end $ci \n############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+            echo -e "\n$CI_INDENT############################################################\n$CI_INDENT### $CI_FILE_GLOB \n$CI_INDENT############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+            sed -r -e "s/^/$CI_INDENT/" $CI_FILE_GLOB >> "$NGINX_CONFIG_COPY.$DATE_EXT"
+            echo -e "\n$CI_INDENT############################################################\n$CI_INDENT### end $CI_FILE_GLOB \n$CI_INDENT############################################################" >> "$NGINX_CONFIG_COPY.$DATE_EXT"
             PREVIOUS_CI_LINE="$CI_LINE"
         done
         #debug "pre-cat waiting..."
@@ -155,7 +157,7 @@ function print-usage {
     cat - <<HEREDOC
     
 usage:
-    $0 <mode> <source_file> <output_file|output_directory>
+    $0 <mode> <input_file> <output_file|output_directory>
     
 modes:
     
@@ -165,7 +167,7 @@ modes:
         
     clean-directory:
         generate a cleaned nginx config directory, containing only the files
-        that are included from the source file, or files included from those,
+        that are included from the input file, or files included from those,
         and so on; output to <output_directory>
     
 HEREDOC
