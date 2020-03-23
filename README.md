@@ -49,13 +49,13 @@ The `flatten` mode makes an honest attempt at keeping indentation sane. This mea
 
 ### Assumptions:
 
- - the input config is a valid `nginx` config
+ - The input config is a valid `nginx` config.
 
- - include file paths do not contain spaces  
+ - Include file paths do not contain spaces.  
    *(this seems compatible with how nginx handles includes)*
 
- - no files are included from above the base directory if the input nginx
-   config file
+ - No files are included from above the base directory of the input `nginx`
+   config file.
  
 
 ## FAQ
