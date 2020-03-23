@@ -324,17 +324,18 @@ debug "    config directory: 'NGINX_CONFIG_DIR'"
 
 cd "$NGINX_CONFIG_DIR"
 
-TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
-debug "+-- TMP_WORKDIR: $TMP_WORKDIR"
-
 # the list of files whose includes we have not copied yet
 NGINX_CONFIG_ELEMENTS=("$NGINX_CONFIG")
 
 
 # what are we doing, eh?
 if [ "$1" == "flatten" ]; then
+    TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
+    debug "+-- TMP_WORKDIR: $TMP_WORKDIR"
     nginx-flatten
 elif [ "$1" == "clean-directory" ]; then
+    TMP_WORKDIR="$( mktemp -d /tmp/nginx-conf-flatten.XXXX )"
+    debug "+-- TMP_WORKDIR: $TMP_WORKDIR"
     nginx-clean-directory
 elif [ "$1" == "tree" ]; then
     nginx-tree
